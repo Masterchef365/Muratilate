@@ -63,6 +63,9 @@ fn main() -> Fallible<()> {
     //let _ = stdin_char()?;
 
     for row_beginning in (0..virtual_height).step_by(PAPER_WIDTH_PX as usize) {
+        println!("Please cut here!");
+        let _ = stdin_char()?;
+
         let image_begin = image_height * row_beginning / virtual_height;
         let image_crop_height = image_height * PRINTABLE_WIDTH_PX / virtual_height;
         //println!("Row begin: {} Crop begin: {} Crop height: {}", row_beginning, image_begin, image_crop_height);
@@ -109,10 +112,10 @@ fn main() -> Fallible<()> {
         let converted_dither =
             RgbImage::from_raw(dithered.width(), dithered.height(), dithered.raw_buf())
                 .ok_or(format_err!("Failed to convert dithered image to buffer"))?;
-        converted_dither.save(format!("{}.jpg", image_begin))?;
+        //converted_dither.save(format!("{}.jpg", image_begin))?;
 
-        /*
-        let printer_image = escposify::img::Image::from(DynamicImage::ImageRgb8(converted_dither));
+        let dyn_image = DynamicImage::ImageRgb8(converted_dither).rotate90();
+        let printer_image = escposify::img::Image::from(dyn_image);
 
         // Print the image
         printer.flush()?;
@@ -120,10 +123,6 @@ fn main() -> Fallible<()> {
         printer.flush()?;
         printer.bit_image(&printer_image, None)?;
         printer.flush()?;
-
-            */
-        //println!("Please cut here!");
-        //let _ = stdin_char()?;
     }
 
     Ok(())
