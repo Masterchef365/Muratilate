@@ -7,21 +7,20 @@
  * Improve UX
  */
 mod crop_bounds;
-mod pos58;
 use crop_bounds::{CropBounds, CropInfo};
 
 const IN_PER_FT: f32 = 12.0;
 const MM_PER_IN: f32 = 25.4;
-const PX_PER_FT: f32 = pos58::DOTS_PER_MM as f32 * MM_PER_IN * IN_PER_FT;
-const PRINTABLE_WIDTH_PX: u32 = pos58::DOTS_PER_MM * pos58::PRINTABLE_WIDTH_MM;
-const PAPER_WIDTH_PX: u32 = pos58::DOTS_PER_MM * pos58::PAPER_WIDTH_MM;
+const PX_PER_FT: f32 = pos58_usb::DOTS_PER_MM as f32 * MM_PER_IN * IN_PER_FT;
+const PRINTABLE_WIDTH_PX: u32 = pos58_usb::DOTS_PER_MM * pos58_usb::PRINTABLE_WIDTH_MM;
+const PAPER_WIDTH_PX: u32 = pos58_usb::DOTS_PER_MM * pos58_usb::PAPER_WIDTH_MM;
 
 use dither::color::*;
 use dither::ditherer::*;
 use escposify::printer::Printer;
 use failure::{format_err, Fallible};
 use image::{imageops::resize, DynamicImage, FilterType, GenericImage, GenericImageView, RgbImage};
-use pos58::POS58USB;
+use pos58_usb::POS58USB;
 
 fn print_usage_and_exit() -> ! {
     eprintln!("Args: <image path> <actual width>");
@@ -34,8 +33,7 @@ fn stdin_char() -> Fallible<char> {
     string
         .chars()
         .nth(0)
-        .ok_or(format_err!("Expected input character"))
-        .into()
+        .ok_or_else(|| format_err!("Expected input character"))
 }
 
 fn main() -> Fallible<()> {
@@ -99,7 +97,7 @@ fn main() -> Fallible<()> {
             image_upscaled.pixels().map(|p| RGB::from(p.data)),
             image_upscaled.width(),
         )
-        .ok_or(format_err!("Failed to convert to ditherable image"))?
+        .ok_or_else(|| format_err!("Failed to convert to ditherable image"))?
         .convert_with(|rgb| rgb.convert_with(f64::from));
 
         // Dither the image using the SIERRA 3 algorithm
@@ -111,7 +109,7 @@ fn main() -> Fallible<()> {
         // Switch the image back to a consumable format for the printer
         let converted_dither =
             RgbImage::from_raw(dithered.width(), dithered.height(), dithered.raw_buf())
-                .ok_or(format_err!("Failed to convert dithered image to buffer"))?;
+                .ok_or_else(|| format_err!("Failed to convert dithered image to buffer"))?;
 
         //converted_dither.save(format!("{}.jpg", crop_top))?;
 
