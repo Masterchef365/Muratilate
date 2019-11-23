@@ -58,17 +58,11 @@ fn main() -> Fallible<()> {
 
     let mut printer = Printer::new(&mut device, None, None);
 
-    //printer.text("This is a test, okay?")?;
-    //printer.flush();
-    //let _ = stdin_char()?;
-
-    for row_beginning in (0..virtual_height).step_by(PAPER_WIDTH_PX as usize) {
-        println!("Please cut here!");
-        let _ = stdin_char()?;
+    let mut print_row = |row_beginning| -> Fallible<()> {
+        println!("Printing from virtual row: {}", row_beginning);
 
         let image_begin = image_height * row_beginning / virtual_height;
         let image_crop_height = image_height * PRINTABLE_WIDTH_PX / virtual_height;
-        //println!("Row begin: {} Crop begin: {} Crop height: {}", row_beginning, image_begin, image_crop_height);
 
         // Crop the last row if it doesn't quite fit.
         let image_view = if image_begin + image_crop_height <= image_height {
@@ -83,16 +77,12 @@ fn main() -> Fallible<()> {
             rest_of_view
         };
 
-        //println!("{:?}", image_view.dimensions());
-
         let image_upscaled = resize(
             &image_view,
             virtual_width,
             PRINTABLE_WIDTH_PX,
             FilterType::Triangle,
         );
-
-        //println!("{:?}", image_upscaled.dimensions());
 
         // Convert the image to a ditherable format
         let ditherable_image = dither::prelude::Img::<RGB<u8>>::new(
@@ -112,17 +102,40 @@ fn main() -> Fallible<()> {
         let converted_dither =
             RgbImage::from_raw(dithered.width(), dithered.height(), dithered.raw_buf())
                 .ok_or(format_err!("Failed to convert dithered image to buffer"))?;
+
         //converted_dither.save(format!("{}.jpg", image_begin))?;
 
         let dyn_image = DynamicImage::ImageRgb8(converted_dither).rotate90();
         let printer_image = escposify::img::Image::from(dyn_image);
 
         // Print the image
-        printer.flush()?;
         printer.align("lt")?;
-        printer.flush()?;
         printer.bit_image(&printer_image, None)?;
         printer.flush()?;
+
+        Ok(())
+    };
+
+
+    let mut row_beginning = 0u32;
+    loop {
+        println!("Row: {}", row_beginning);
+        println!("'r' = repeat last row, 's' = skip row, 'q' = quit, else print row");
+        match stdin_char()? {
+            'r' => print_row(row_beginning)?,
+            's' => {
+                row_beginning += PAPER_WIDTH_PX;
+            }
+            'q' => break,
+            _ => {
+                print_row(row_beginning)?;
+                row_beginning += PAPER_WIDTH_PX;
+            },
+        }
+
+        if row_beginning > virtual_height {
+            break;
+        }
     }
 
     Ok(())
