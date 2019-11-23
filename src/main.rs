@@ -3,7 +3,7 @@ use dither::color::*;
 use dither::ditherer::*;
 use escposify::printer::Printer;
 use failure::{format_err, Fallible};
-use image::{imageops::resize, DynamicImage, FilterType, GenericImageView, RgbImage};
+use image::{imageops::resize, DynamicImage, FilterType, GenericImage, GenericImageView, RgbImage};
 use pos58::POS58USB;
 
 const IN_PER_FT: f32 = 12.0;
@@ -15,6 +15,16 @@ const PAPER_WIDTH_PX: u32 = pos58::DOTS_PER_MM * pos58::PAPER_WIDTH_MM;
 fn print_usage_and_exit() -> ! {
     eprintln!("Args: <image path> <actual width>");
     std::process::exit(-1);
+}
+
+fn stdin_char() -> Fallible<char> {
+    let mut string = String::new();
+    std::io::stdin().read_line(&mut string)?;
+    string
+        .chars()
+        .nth(0)
+        .ok_or(format_err!("Expected input character"))
+        .into()
 }
 
 fn main() -> Fallible<()> {
@@ -48,35 +58,38 @@ fn main() -> Fallible<()> {
 
     let mut printer = Printer::new(&mut device, None, None);
 
-    for row_beginning in (0..=virtual_height).step_by(PAPER_WIDTH_PX as usize) {
-        println!("{}", row_beginning);
+    //printer.text("This is a test, okay?")?;
+    //printer.flush();
+    //let _ = stdin_char()?;
+
+    for row_beginning in (0..virtual_height).step_by(PAPER_WIDTH_PX as usize) {
         let image_begin = image_height * row_beginning / virtual_height;
         let image_crop_height = image_height * PRINTABLE_WIDTH_PX / virtual_height;
+        //println!("Row begin: {} Crop begin: {} Crop height: {}", row_beginning, image_begin, image_crop_height);
 
-        // Stretch the last row if it doesn't quite fit.
+        // Crop the last row if it doesn't quite fit.
         let image_view = if image_begin + image_crop_height <= image_height {
-            image.view(0, image_begin, image_width, image_crop_height)
+            image
+                .view(0, image_begin, image_width, image_crop_height)
+                .to_image()
         } else {
-            println!("Stretched last.");
-            image.view(
-                0,
-                image_begin,
-                image_width,
-                image_height % image_crop_height,
-            )
+            let crop_view = image.view(0, image_begin, image_width, image_height - image_begin);
+            let mut rest_of_view =
+                RgbImage::from_pixel(image_width, image_crop_height, image::Rgb([255, 255, 255]));
+            rest_of_view.copy_from(&crop_view, 0, 0);
+            rest_of_view
         };
 
-        let image_view = image_view.to_image();
+        //println!("{:?}", image_view.dimensions());
 
         let image_upscaled = resize(
             &image_view,
             virtual_width,
             PRINTABLE_WIDTH_PX,
-            FilterType::Nearest,
+            FilterType::Triangle,
         );
 
-        println!("{:?}", image_view.dimensions());
-        println!("{:?}", image_upscaled.dimensions());
+        //println!("{:?}", image_upscaled.dimensions());
 
         // Convert the image to a ditherable format
         let ditherable_image = dither::prelude::Img::<RGB<u8>>::new(
@@ -94,19 +107,23 @@ fn main() -> Fallible<()> {
 
         // Switch the image back to a consumable format for the printer
         let converted_dither =
-            RgbImage::from_vec(dithered.width(), dithered.height(), dithered.raw_buf())
+            RgbImage::from_raw(dithered.width(), dithered.height(), dithered.raw_buf())
                 .ok_or(format_err!("Failed to convert dithered image to buffer"))?;
         converted_dither.save(format!("{}.jpg", image_begin))?;
 
+        /*
         let printer_image = escposify::img::Image::from(DynamicImage::ImageRgb8(converted_dither));
 
         // Print the image
-        printer
-            .align("lt")
-            .map_err(|_| format_err!("Failed to write to printer"))?;
-        printer
-            .bit_image(&printer_image, None)
-            .map_err(|_| format_err!("Failed to write to printer"))?;
+        printer.flush()?;
+        printer.align("lt")?;
+        printer.flush()?;
+        printer.bit_image(&printer_image, None)?;
+        printer.flush()?;
+
+            */
+        //println!("Please cut here!");
+        //let _ = stdin_char()?;
     }
 
     Ok(())
